@@ -17,6 +17,13 @@ from sipl.diagnostics import (
 )
 from sipl.interpreter import execute
 from sipl.parser import check_syntax, parse
+from sipl.visualization import (
+    build_parse_tree,
+    render_dot,
+    render_json,
+    render_svg,
+    render_text,
+)
 
 SCHEMA_VERSION = "1.0"
 
@@ -241,6 +248,72 @@ def _cmd_execute(args: argparse.Namespace, *, include_events: bool) -> int:
 
     return int(ExitCode.OK)
 
+def _cmd_tree(args: argparse.Namespace) -> int:
+    try:
+        source = _read_source(args.file)
+    except OSError as exc:
+        return _report_input_error("tree", f"Cannot read {args.file!r}: {exc}", args.json)
+
+    try:
+        root = build_parse_tree(source)
+    except SiplSyntaxError as exc:
+        if args.json:
+            _emit_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "command": "tree",
+                    "ok": False,
+                    "exit_code": int(ExitCode.SYNTAX_ERROR),
+                    "diagnostics": [exc.diagnostic.to_dict()],
+                }
+            )
+        else:
+            print(exc.diagnostic.format(), file=sys.stderr)
+        return int(ExitCode.SYNTAX_ERROR)
+
+    fmt: str = args.format
+    if fmt == "text":
+        rendered = render_text(root)
+    elif fmt == "json":
+        rendered = render_json(root)
+    elif fmt == "dot":
+        rendered = render_dot(root)
+    elif fmt == "svg":
+        rendered = render_svg(root)
+    else:
+        return _report_input_error("tree", f"Unsupported format {fmt!r}.", args.json)
+
+    output_path: str | None = args.output
+    if output_path is not None:
+        try:
+            Path(output_path).write_text(rendered, encoding="utf-8")
+        except OSError as exc:
+            return _report_input_error(
+                "tree",
+                f"Cannot write {output_path!r}: {exc}",
+                args.json,
+            )
+
+    if args.json:
+        payload: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "command": "tree",
+            "ok": True,
+            "exit_code": int(ExitCode.OK),
+            "format": fmt,
+            "tree": root.to_dict(),
+        }
+        if fmt != "json":
+            payload["output"] = rendered
+        if output_path is not None:
+            payload["output_path"] = output_path
+        _emit_json(payload)
+    elif output_path is not None:
+        print(f"Wrote {fmt} parse tree to {output_path}")
+    else:
+        print(rendered)
+
+    return int(ExitCode.OK)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -313,6 +386,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Execute a SIPL program and emit execution trace events.",
     )
     p_trace.set_defaults(handler=lambda ns: _cmd_execute(ns, include_events=True))
+
+    p_tree = subparsers.add_parser(
+        "tree",
+        parents=[common_io],
+        help="Render the concrete parse tree as text, json, dot, or svg.",
+    )
+    p_tree.add_argument(
+        "-f",
+        "--format",
+        choices=("text", "json", "dot", "svg"),
+        default="text",
+        help="Visualization output format (default: text).",
+    )
+    p_tree.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        help="Write rendered output to a file instead of stdout.",
+    )
+    p_tree.set_defaults(handler=_cmd_tree)
 
     return parser
 
