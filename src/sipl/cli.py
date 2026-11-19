@@ -17,6 +17,7 @@ from sipl.diagnostics import (
 )
 from sipl.interpreter import execute
 from sipl.parser import check_syntax, parse
+from sipl.semantics import build_semantic_term
 from sipl.visualization import (
     build_parse_tree,
     render_dot,
@@ -315,6 +316,49 @@ def _cmd_tree(args: argparse.Namespace) -> int:
 
     return int(ExitCode.OK)
 
+def _cmd_sem(args: argparse.Namespace) -> int:
+    try:
+        source = _read_source(args.file)
+    except OSError as exc:
+        return _report_input_error("sem", f"Cannot read {args.file!r}: {exc}", args.json)
+
+    try:
+        built = build_semantic_term(source)
+    except SiplSyntaxError as exc:
+        if args.json:
+            _emit_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "command": "sem",
+                    "ok": False,
+                    "exit_code": int(ExitCode.SYNTAX_ERROR),
+                    "diagnostics": [exc.diagnostic.to_dict()],
+                }
+            )
+        else:
+            print(exc.diagnostic.format(), file=sys.stderr)
+        return int(ExitCode.SYNTAX_ERROR)
+
+    style = args.style
+    if args.json:
+        payload: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "command": "sem",
+            "ok": True,
+            "exit_code": int(ExitCode.OK),
+            **built.to_dict(style=style),
+        }
+        _emit_json(payload)
+    else:
+        print(built.format(style=style))
+        if args.steps:
+            print("Applied rules:")
+            for idx, step in enumerate(built.steps, start=1):
+                loc = f"{step.span.start_line}:{step.span.start_col}"
+                print(f"  {idx}. {step.rule} ({step.ast_kind} @ {loc})")
+
+    return int(ExitCode.OK)
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sipl",
@@ -406,6 +450,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write rendered output to a file instead of stdout.",
     )
     p_tree.set_defaults(handler=_cmd_tree)
+
+    p_sem = subparsers.add_parser(
+        "sem",
+        parents=[common_io],
+        help="Construct the course semantic term for a SIPL program.",
+    )
+    p_sem.add_argument(
+        "--style",
+        choices=("course", "ascii"),
+        default="course",
+        help="Semantic term notation style (default: course).",
+    )
+    p_sem.add_argument(
+        "--steps",
+        action="store_true",
+        help="Print the sequence of applied rewriting rules in text mode.",
+    )
+    p_sem.set_defaults(handler=_cmd_sem)
 
     return parser
 
