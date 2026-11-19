@@ -59,3 +59,22 @@ class SiplError(Exception):
 
 class SiplSyntaxError(SiplError):
     """Raised when SIPL source code contains a lexical or syntax error."""
+
+class SiplRuntimeError(SiplError):
+    """Raised when a runtime error occurs during SIPL execution."""
+
+    def __init__(
+        self,
+        diagnostic: Diagnostic,
+        events: tuple[Any, ...] = (),
+    ) -> None:
+        super().__init__(diagnostic)
+        self.events = events
+
+
+class UndefinedVariableError(SiplRuntimeError):
+    """Raised when reading a variable that is not defined in the current state."""
+
+
+class StepLimitExceededError(SiplRuntimeError):
+    """Raised when execution exceeds the configured maximum number of steps."""
