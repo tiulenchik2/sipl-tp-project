@@ -13,7 +13,7 @@ from sipl.interpreter import ExecutionResult, Interpreter, execute
 from sipl.parser import check_syntax, parse, parse_tree
 from sipl.semantics import SemanticBuildResult, build_semantic_term, format_term
 
-__version__ = "0.5.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "Diagnostic",
