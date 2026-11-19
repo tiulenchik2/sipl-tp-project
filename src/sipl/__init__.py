@@ -12,7 +12,7 @@ from sipl.diagnostics import (
 from sipl.interpreter import ExecutionResult, Interpreter, execute
 from sipl.parser import check_syntax, parse, parse_tree
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Diagnostic",
