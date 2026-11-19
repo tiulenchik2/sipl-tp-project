@@ -1,0 +1,55 @@
+program: "begin" stmt "end"
+
+?stmt: seq_stmt
+
+seq_stmt: seq_stmt ";" simple_stmt                       -> seq
+        | simple_stmt
+
+?simple_stmt: assign_stmt
+            | if_stmt
+            | while_stmt
+            | block_stmt
+            | skip_stmt
+
+assign_stmt: VAR ":=" aexp                               -> assign
+if_stmt: "if" bexp "then" simple_stmt "else" simple_stmt
+while_stmt: "while" bexp "do" simple_stmt
+block_stmt: "begin" stmt "end"                           -> block
+skip_stmt: "skip"                                        -> skip
+
+?aexp: add_expr
+
+add_expr: add_expr "+" mul_expr                          -> add
+        | add_expr "-" mul_expr                          -> sub
+        | mul_expr
+
+mul_expr: mul_expr "*" a_atom                            -> mul
+        | a_atom
+
+?a_atom: NUMBER                                          -> number
+       | "-" NUMBER                                      -> neg_number
+       | VAR                                             -> var
+       | "(" aexp ")"                                    -> a_paren
+
+?bexp: or_expr
+
+or_expr: or_expr OR_OP not_expr                          -> b_or
+       | not_expr
+
+not_expr: NOT_OP not_expr                                -> b_not
+        | b_atom
+
+?b_atom: aexp "=" aexp                                   -> b_eq
+       | aexp ">" aexp                                   -> b_gt
+       | "(" bexp ")"                                    -> b_paren
+
+OR_OP: /∨|\bor\b/
+NOT_OP: /¬|\bnot\b/
+NUMBER: /[0-9]+/
+VAR: /(?!\b(?:begin|end|if|then|else|while|do|skip|or|not)\b)[A-Za-z_][A-Za-z0-9_]*/
+
+COMMENT: /#[^\n]*/
+
+%import common.WS
+%ignore WS
+%ignore COMMENT
